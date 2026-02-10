@@ -1,0 +1,3 @@
+C:/Users/hbopp/Downloads/vectordbproject/build/CMakeFiles/vector_db.dir
+C:/Users/hbopp/Downloads/vectordbproject/build/CMakeFiles/edit_cache.dir
+C:/Users/hbopp/Downloads/vectordbproject/build/CMakeFiles/rebuild_cache.dir

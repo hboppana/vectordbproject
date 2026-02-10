@@ -9,5 +9,5 @@ inline float l2_distance(const Vector& a, const Vector& b) {
         float diff = a[i] - b[i];
         sum += diff * diff;
     }
-    return std::sqrt(sum);
+    return sum;
 }

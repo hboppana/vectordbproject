@@ -10,6 +10,7 @@ void FlatIndex::add(const Vector& vec) {
 
 std::vector<size_t> FlatIndex::search(const Vector& query, size_t k) const {
     std::vector<std::pair<float, size_t>> scores;
+    k = std::min(k, scores.size());
 
     for (size_t i = 0; i < vectors_.size(); i++) {
         float dist = l2_distance(query, vectors_[i]);

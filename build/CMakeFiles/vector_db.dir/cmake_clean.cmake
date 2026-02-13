@@ -1,6 +1,8 @@
 file(REMOVE_RECURSE
   "CMakeFiles/vector_db.dir/src/index/flat/flat_index.cpp.obj"
   "CMakeFiles/vector_db.dir/src/index/flat/flat_index.cpp.obj.d"
+  "CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.obj"
+  "CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.obj.d"
   "CMakeFiles/vector_db.dir/src/main.cpp.obj"
   "CMakeFiles/vector_db.dir/src/main.cpp.obj.d"
   "libvector_db.dll.a"

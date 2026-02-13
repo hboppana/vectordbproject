@@ -152,6 +152,30 @@ src/index/flat/flat_index.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\vector_db.dir\build.make CMakeFiles/vector_db.dir/src/index/flat/flat_index.cpp.s
 .PHONY : src/index/flat/flat_index.cpp.s
 
+src/index/hnsw/hnsw_index.obj: src/index/hnsw/hnsw_index.cpp.obj
+.PHONY : src/index/hnsw/hnsw_index.obj
+
+# target to build an object file
+src/index/hnsw/hnsw_index.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\vector_db.dir\build.make CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.obj
+.PHONY : src/index/hnsw/hnsw_index.cpp.obj
+
+src/index/hnsw/hnsw_index.i: src/index/hnsw/hnsw_index.cpp.i
+.PHONY : src/index/hnsw/hnsw_index.i
+
+# target to preprocess a source file
+src/index/hnsw/hnsw_index.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\vector_db.dir\build.make CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.i
+.PHONY : src/index/hnsw/hnsw_index.cpp.i
+
+src/index/hnsw/hnsw_index.s: src/index/hnsw/hnsw_index.cpp.s
+.PHONY : src/index/hnsw/hnsw_index.s
+
+# target to generate assembly for a file
+src/index/hnsw/hnsw_index.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\vector_db.dir\build.make CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.s
+.PHONY : src/index/hnsw/hnsw_index.cpp.s
+
 src/main.obj: src/main.cpp.obj
 .PHONY : src/main.obj
 
@@ -188,6 +212,9 @@ help:
 	@echo ... src/index/flat/flat_index.obj
 	@echo ... src/index/flat/flat_index.i
 	@echo ... src/index/flat/flat_index.s
+	@echo ... src/index/hnsw/hnsw_index.obj
+	@echo ... src/index/hnsw/hnsw_index.i
+	@echo ... src/index/hnsw/hnsw_index.s
 	@echo ... src/main.obj
 	@echo ... src/main.i
 	@echo ... src/main.s

@@ -29,3 +29,7 @@ std::vector<size_t> FlatIndex::search(const Vector& query, size_t k) const {
     }
     return result;
 }
+
+size_t FlatIndex::size() const {
+    return vectors_.size();
+}

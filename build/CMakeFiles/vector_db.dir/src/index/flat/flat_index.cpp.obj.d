@@ -1,6 +1,7 @@
 CMakeFiles/vector_db.dir/src/index/flat/flat_index.cpp.obj: \
  C:\Users\hbopp\Downloads\vectordbproject\src\index\flat\flat_index.cpp \
  C:/Users/hbopp/Downloads/vectordbproject/src/index/flat/flat_index.h \
+ C:/Users/hbopp/Downloads/vectordbproject/src/index/index_base.h \
  C:/Users/hbopp/Downloads/vectordbproject/src/core/vector.h \
  C:/msys64/ucrt64/include/c++/15.2.0/vector \
  C:/msys64/ucrt64/include/c++/15.2.0/bits/requires_hosted.h \

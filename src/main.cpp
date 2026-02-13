@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <memory>
 #include <numeric>
 #include <random>
 #include <vector>
@@ -23,9 +24,10 @@ int main() {
     const std::vector<size_t> sizes = {10000, 50000, 100000, 250000};
 
     for (size_t n : sizes) {
-        FlatIndex index(dim);
+        std::unique_ptr<IndexBase> index =
+            std::make_unique<FlatIndex>(dim);
         for (size_t i = 0; i < n; i++) {
-            index.add(random_vector(dim));
+            index->add(random_vector(dim));
         }
 
         std::vector<double> latencies_ms;
@@ -34,7 +36,7 @@ int main() {
         for (size_t i = 0; i < queries; i++) {
             Vector query = random_vector(dim);
             Timer timer;
-            auto results = index.search(query, k);
+            auto results = index->search(query, k);
             (void)results;
             latencies_ms.push_back(timer.elapsed_ms());
         }

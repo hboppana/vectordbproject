@@ -1,4 +1,5 @@
 #include "hnsw_index.h"
+#include "core/distance.h"
 #include <cmath>
 
 HNSWIndex::HNSWIndex(size_t dim, size_t M)
@@ -18,6 +19,42 @@ int HNSWIndex::generate_level() {
 
     double r = -std::log(dist(gen)) * 1.0;
     return static_cast<int>(r);
+}
+
+
+// basic greedy search
+size_t HNSWIndex::greedy_search(
+    const Vector& query,
+    size_t entry,
+    int level
+) const {
+    if (level >= static_cast<int>(nodes_[entry].neighbors.size()) ||
+        nodes_[entry].neighbors[level].empty()) {
+        return entry;
+    }
+
+    size_t current = entry;
+    float current_dist = l2_distance(query, nodes_[current].vector);
+
+    while (true) {
+        bool improved = false;
+        if (level < static_cast<int>(nodes_[current].neighbors.size())) {
+            for (size_t neighbor : nodes_[current].neighbors[level]) {
+                float dist = l2_distance(query, nodes_[neighbor].vector);
+                if (dist < current_dist) {
+                    current = neighbor;
+                    current_dist = dist;
+                    improved = true;
+                }
+            }
+        }
+
+        if (!improved) {
+            break;
+        }
+    }
+
+    return current;
 }
 
 // add node function
@@ -45,5 +82,19 @@ std::vector<size_t> HNSWIndex::search(
     const Vector& query,
     size_t k
 ) const {
-    return {};
+    (void)k;
+
+    if (nodes_.empty()) {
+        return {};
+    }
+
+    size_t current = entry_point_;
+
+    for (int level = max_level_; level > 0; level--) {
+        current = greedy_search(query, current, level);
+    }
+
+    current = greedy_search(query, current, 0);
+
+    return {current};
 }

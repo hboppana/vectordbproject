@@ -31,4 +31,11 @@ private:
     std::vector<Node> nodes_;
 
     int generate_level();
+
+    // greedy search
+    size_t greedy_search(
+        const Vector& query,
+        size_t entry,
+        int level
+    ) const;
 };

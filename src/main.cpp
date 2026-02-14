@@ -1,8 +1,11 @@
+#include "core/distance.h"
 #include "index/flat/flat_index.h"
+#include "index/hnsw/hnsw_index.h"
 #include "utils/timer.h"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <random>
@@ -19,37 +22,68 @@ Vector random_vector(size_t dim) {
 
 int main() {
     const size_t dim = 128;
-    const size_t k = 5; // return 5 closest vectors by euclidean distance
+    const std::vector<size_t> sizes = {100, 1000, 10000};
     const size_t queries = 100;
-    const std::vector<size_t> sizes = {10000, 50000, 100000, 250000};
 
     for (size_t n : sizes) {
-        std::unique_ptr<IndexBase> index =
-            std::make_unique<FlatIndex>(dim);
+        HNSWIndex index(dim);
+        std::vector<Vector> dataset;
+        dataset.reserve(n);
+
         for (size_t i = 0; i < n; i++) {
-            index->add(random_vector(dim));
+            Vector v = random_vector(dim);
+            dataset.push_back(v);
+            index.add(v);
         }
 
-        std::vector<double> latencies_ms;
-        latencies_ms.reserve(queries);
+        size_t matches = 0;
+        size_t last_returned = 0;
+        float last_returned_dist = 0.0f;
+        size_t last_brute_index = 0;
+        float last_brute_dist = 0.0f;
 
-        for (size_t i = 0; i < queries; i++) {
+        for (size_t q = 0; q < queries; q++) {
             Vector query = random_vector(dim);
-            Timer timer;
-            auto results = index->search(query, k);
-            (void)results;
-            latencies_ms.push_back(timer.elapsed_ms());
+            auto results = index.search(query, 1);
+
+            if (results.empty()) {
+                continue;
+            }
+
+            const size_t returned = results[0];
+            const float returned_dist = l2_distance(query, dataset[returned]);
+
+            size_t brute_index = 0;
+            float brute_dist = std::numeric_limits<float>::infinity();
+            for (size_t i = 0; i < dataset.size(); i++) {
+                float dist = l2_distance(query, dataset[i]);
+                if (dist < brute_dist) {
+                    brute_dist = dist;
+                    brute_index = i;
+                }
+            }
+
+            if (returned == brute_index) {
+                matches++;
+            }
+
+            last_returned = returned;
+            last_returned_dist = returned_dist;
+            last_brute_index = brute_index;
+            last_brute_dist = brute_dist;
         }
 
-        const double total = std::accumulate(latencies_ms.begin(), latencies_ms.end(), 0.0);
-        const double avg = total / static_cast<double>(latencies_ms.size());
+        const double recall = static_cast<double>(matches) / static_cast<double>(queries);
 
-        std::sort(latencies_ms.begin(), latencies_ms.end());
-        const size_t p95_index = static_cast<size_t>(std::ceil(0.95 * latencies_ms.size())) - 1;
-        const double p95 = latencies_ms[p95_index];
-
-        std::cout << "N=" << n << " -> avg " << avg << " ms, p95 " << p95 << " ms\n";
+        std::cout << "N=" << n
+                  << " -> returned " << last_returned
+                  << " (dist " << last_returned_dist << ")"
+                  << ", brute " << last_brute_index
+                  << " (dist " << last_brute_dist << ")"
+                  << ", Recall@1 = " << recall << "\n";
     }
+
+    // Previous benchmark logic can be re-enabled if needed.
 
     return 0;
 }

@@ -138,4 +138,10 @@ CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.obj: \
  C:/msys64/ucrt64/include/c++/15.2.0/bits/stl_numeric.h \
  C:/msys64/ucrt64/include/c++/15.2.0/pstl/glue_numeric_defs.h \
  C:/msys64/ucrt64/include/c++/15.2.0/pstl/execution_defs.h \
- C:/Users/hbopp/Downloads/vectordbproject/src/core/distance.h
+ C:/Users/hbopp/Downloads/vectordbproject/src/core/distance.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/algorithm \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/stl_algo.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/algorithmfwd.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/stl_heap.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/stl_tempbuf.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/pstl/glue_algorithm_defs.h

@@ -38,4 +38,11 @@ private:
         size_t entry,
         int level
     ) const;
+
+    std::vector<size_t> find_nearest_at_level(
+        const Vector& query,
+        size_t entry,
+        int level,
+        size_t M
+    ) const;
 };

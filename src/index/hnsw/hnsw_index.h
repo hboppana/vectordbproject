@@ -7,6 +7,8 @@ class HNSWIndex : public IndexBase {
 public:
     HNSWIndex(size_t dim, size_t M = 16);
 
+    void set_ef_search(size_t ef_search);
+
     void add(const Vector& vec) override;
     std::vector<size_t> search(
         const Vector& query,
@@ -27,6 +29,7 @@ private:
     size_t M_;                // max neighbors per level
     int max_level_;
     size_t entry_point_;      // index of entry node
+    size_t ef_search_ = 20; // for ef_search
 
     std::vector<Node> nodes_;
 

@@ -24,6 +24,7 @@ int main() {
     const size_t dim = 128;
     const std::vector<size_t> sizes = {100, 1000, 10000};
     const size_t queries = 100;
+    const std::vector<size_t> ef_values = {10, 20, 50};
 
     for (size_t n : sizes) {
         HNSWIndex index(dim);
@@ -36,51 +37,55 @@ int main() {
             index.add(v);
         }
 
-        size_t matches = 0;
-        size_t last_returned = 0;
-        float last_returned_dist = 0.0f;
-        size_t last_brute_index = 0;
-        float last_brute_dist = 0.0f;
-
+        std::vector<Vector> query_set;
+        query_set.reserve(queries);
         for (size_t q = 0; q < queries; q++) {
-            Vector query = random_vector(dim);
-            auto results = index.search(query, 1);
+            query_set.push_back(random_vector(dim));
+        }
 
-            if (results.empty()) {
-                continue;
-            }
+        for (size_t ef : ef_values) {
+            index.set_ef_search(ef);
 
-            const size_t returned = results[0];
-            const float returned_dist = l2_distance(query, dataset[returned]);
+            size_t matches = 0;
+            double total_search_ms = 0.0;
 
-            size_t brute_index = 0;
-            float brute_dist = std::numeric_limits<float>::infinity();
-            for (size_t i = 0; i < dataset.size(); i++) {
-                float dist = l2_distance(query, dataset[i]);
-                if (dist < brute_dist) {
-                    brute_dist = dist;
-                    brute_index = i;
+            for (size_t q = 0; q < queries; q++) {
+                const Vector& query = query_set[q];
+
+                Timer search_timer;
+                auto results = index.search(query, 1);
+                total_search_ms += search_timer.elapsed_ms();
+
+                if (results.empty()) {
+                    continue;
+                }
+
+                const size_t returned = results[0];
+
+                size_t brute_index = 0;
+                float brute_dist = std::numeric_limits<float>::infinity();
+                for (size_t i = 0; i < dataset.size(); i++) {
+                    float dist = l2_distance(query, dataset[i]);
+                    if (dist < brute_dist) {
+                        brute_dist = dist;
+                        brute_index = i;
+                    }
+                }
+
+                if (returned == brute_index) {
+                    matches++;
                 }
             }
 
-            if (returned == brute_index) {
-                matches++;
-            }
+            const double recall = static_cast<double>(matches) / static_cast<double>(queries);
+            const double avg_search_ms = total_search_ms / static_cast<double>(queries);
 
-            last_returned = returned;
-            last_returned_dist = returned_dist;
-            last_brute_index = brute_index;
-            last_brute_dist = brute_dist;
+            std::cout << "N=" << n
+                      << " ef=" << ef
+                      << " -> Recall@1=" << recall
+                      << ", AvgSearchMs=" << avg_search_ms
+                      << "\n";
         }
-
-        const double recall = static_cast<double>(matches) / static_cast<double>(queries);
-
-        std::cout << "N=" << n
-                  << " -> returned " << last_returned
-                  << " (dist " << last_returned_dist << ")"
-                  << ", brute " << last_brute_index
-                  << " (dist " << last_brute_dist << ")"
-                  << ", Recall@1 = " << recall << "\n";
     }
 
     // Previous benchmark logic can be re-enabled if needed.

@@ -30,6 +30,7 @@ private:
     int max_level_;
     size_t entry_point_;      // index of entry node
     size_t ef_search_ = 20; // for ef_search
+    size_t ef_construction_ = 100; // start bigger than ef_search
 
     std::vector<Node> nodes_;
 

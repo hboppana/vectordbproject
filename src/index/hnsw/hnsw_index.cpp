@@ -74,26 +74,58 @@ std::vector<size_t> HNSWIndex::find_nearest_at_level(
         return {};
     }
 
-    const size_t start = greedy_search(query, entry, level);
-    std::vector<size_t> candidates;
-    candidates.reserve(1 + (level < static_cast<int>(nodes_[start].neighbors.size())
-        ? nodes_[start].neighbors[level].size() : 0));
-    candidates.push_back(start);
+    using DistId = std::pair<float, size_t>;
+    auto min_heap_cmp = [](const DistId& a, const DistId& b) {
+        return a.first > b.first;
+    };
 
-    if (level < static_cast<int>(nodes_[start].neighbors.size())) {
-        const auto& start_neighbors = nodes_[start].neighbors[level];
-        candidates.insert(candidates.end(), start_neighbors.begin(), start_neighbors.end());
+    size_t start = greedy_search(query, entry, level);
+    std::priority_queue<DistId, std::vector<DistId>, decltype(min_heap_cmp)> candidates(min_heap_cmp);
+    std::priority_queue<DistId> best_results;
+    std::unordered_set<size_t> visited;
+    visited.reserve(nodes_.size());
+
+    float entry_dist = l2_distance(query, nodes_[start].vector);
+    candidates.emplace(entry_dist, start);
+    best_results.emplace(entry_dist, start);
+    visited.insert(start);
+
+    size_t explored = 0;
+    while (!candidates.empty()) {
+        const auto [candidate_dist, candidate] = candidates.top();
+        candidates.pop();
+
+        if (best_results.size() >= ef_construction_ && candidate_dist > best_results.top().first) {
+            break;
+        }
+        if (explored++ >= ef_construction_) {
+            break;
+        }
+
+        if (level < static_cast<int>(nodes_[candidate].neighbors.size())) {
+            for (size_t neighbor : nodes_[candidate].neighbors[level]) {
+                if (visited.find(neighbor) != visited.end()) {
+                    continue;
+                }
+                visited.insert(neighbor);
+                float dist = l2_distance(query, nodes_[neighbor].vector);
+                candidates.emplace(dist, neighbor);
+                best_results.emplace(dist, neighbor);
+                if (best_results.size() > ef_construction_) {
+                    best_results.pop();
+                }
+            }
+        }
     }
 
-    std::vector<std::pair<float, size_t>> scored;
-    scored.reserve(candidates.size());
-    for (size_t idx : candidates) {
-        float dist = l2_distance(query, nodes_[idx].vector);
-        scored.emplace_back(dist, idx);
+    std::vector<DistId> scored;
+    scored.reserve(best_results.size());
+    while (!best_results.empty()) {
+        scored.push_back(best_results.top());
+        best_results.pop();
     }
-
     std::sort(scored.begin(), scored.end(),
-        [](const auto& a, const auto& b) {
+        [](const DistId& a, const DistId& b) {
             return a.first < b.first;
         });
 

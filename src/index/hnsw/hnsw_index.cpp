@@ -173,6 +173,38 @@ void HNSWIndex::add(const Vector& vec) {
                 nodes_[neighbor].neighbors.resize(level + 1);
             }
             nodes_[neighbor].neighbors[level].push_back(new_index);
+
+            // Prune neighbors if necessary
+            auto& nbrs = nodes_[neighbor].neighbors[level];
+            if (nbrs.size() > M_) {
+                std::vector<std::pair<float, size_t>> dist_nbrs;
+                dist_nbrs.reserve(nbrs.size());
+                for (size_t idx : nbrs) {
+                    float dist = l2_distance(nodes_[neighbor].vector, nodes_[idx].vector);
+                    dist_nbrs.emplace_back(dist, idx);
+                }
+                std::sort(dist_nbrs.begin(), dist_nbrs.end());
+                nbrs.clear();
+                for (size_t i = 0; i < M_ && i < dist_nbrs.size(); ++i) {
+                    nbrs.push_back(dist_nbrs[i].second);
+                }
+            }
+        }
+
+        // Prune new node's neighbors
+        auto& new_nbrs = nodes_[new_index].neighbors[level];
+        if (new_nbrs.size() > M_) {
+            std::vector<std::pair<float, size_t>> dist_nbrs;
+            dist_nbrs.reserve(new_nbrs.size());
+            for (size_t idx : new_nbrs) {
+                float dist = l2_distance(nodes_[new_index].vector, nodes_[idx].vector);
+                dist_nbrs.emplace_back(dist, idx);
+            }
+            std::sort(dist_nbrs.begin(), dist_nbrs.end());
+            new_nbrs.clear();
+            for (size_t i = 0; i < M_ && i < dist_nbrs.size(); ++i) {
+                new_nbrs.push_back(dist_nbrs[i].second);
+            }
         }
     }
 
@@ -180,6 +212,20 @@ void HNSWIndex::add(const Vector& vec) {
         max_level_ = node.level;
         entry_point_ = new_index;
     }
+
+    // Debug output: average and max neighbors per node
+    // can comment out later
+    size_t total = 0;
+    size_t max_nbr = 0;
+    size_t node_count = nodes_.size();
+    for (const auto& n : nodes_) {
+        for (const auto& lvl_nbrs : n.neighbors) {
+            total += lvl_nbrs.size();
+            if (lvl_nbrs.size() > max_nbr) max_nbr = lvl_nbrs.size();
+        }
+    }
+    float avg = node_count ? static_cast<float>(total) / (node_count * (max_level_+1)) : 0.0f;
+    printf("[HNSW] Avg neighbors/node: %.2f, Max neighbors: %zu\n", avg, max_nbr);
 }
 
 // search function

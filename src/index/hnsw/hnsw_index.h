@@ -17,6 +17,14 @@ public:
 
     size_t size() const override;
 
+    // Clean neighbor selection function
+    std::vector<int> select_neighbors(
+        const std::vector<std::pair<float, int>>& candidates,
+        int M,
+        const std::vector<float>& new_vector);
+
+    void prune_neighbors(int node_id, int level);
+
 private:
     struct Node {
         Vector vector;

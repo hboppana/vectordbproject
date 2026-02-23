@@ -4,6 +4,7 @@
 #include <cmath>
 #include <queue>
 #include <unordered_set>
+#include <iostream>
 
 HNSWIndex::HNSWIndex(size_t dim, size_t M)
         : dim_(dim),
@@ -142,6 +143,65 @@ std::vector<size_t> HNSWIndex::find_nearest_at_level(
     return result;
 }
 
+// Clean neighbor selection function
+std::vector<int> HNSWIndex::select_neighbors(
+    const std::vector<std::pair<float, int>>& candidates,
+    int M,
+    const std::vector<float>& new_vector)
+{
+    std::vector<std::pair<float, int>> sorted = candidates;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const auto& a, const auto& b) {
+                  return a.first < b.first; // sort by distance ascending
+              });
+
+    std::vector<int> selected;
+
+    for (const auto& [dist_cn, candidate_id] : sorted) {
+        bool good = true;
+        for (int selected_id : selected) {
+            float dist_cs = l2_distance(
+                nodes_[candidate_id].vector,
+                nodes_[selected_id].vector
+            );
+            if (dist_cs <= dist_cn) {
+                good = false;
+                break;
+            }
+        }
+        if (good) {
+            selected.push_back(candidate_id);
+        }
+        if ((int)selected.size() == M)
+            break;
+    }
+    return selected;
+}
+
+
+// Simple pruning function
+void HNSWIndex::prune_neighbors(int node_id, int level)
+{
+    auto& neighbors = nodes_[node_id].neighbors[level];
+    if ((int)neighbors.size() <= M_)
+        return;
+    std::vector<std::pair<float, int>> dists;
+    for (int nid : neighbors) {
+        float d = l2_distance(
+            nodes_[node_id].vector,
+            nodes_[nid].vector
+        );
+        dists.emplace_back(d, nid);
+    }
+    std::sort(dists.begin(), dists.end(),
+              [](const auto& a, const auto& b) {
+                  return a.first < b.first;
+              });
+    neighbors.clear();
+    for (int i = 0; i < M_ && i < (int)dists.size(); ++i)
+        neighbors.push_back(dists[i].second);
+}
+
 // add node function
 void HNSWIndex::add(const Vector& vec) {
     if (nodes_.empty()) {
@@ -169,47 +229,28 @@ void HNSWIndex::add(const Vector& vec) {
     }
 
     for (int level = node.level; level >= 0; level--) {
-        auto selected = find_nearest_at_level(vec, current, level, M_);
-        nodes_[new_index].neighbors[level] = selected;
-
-        for (size_t neighbor : selected) {
-            if (level >= static_cast<int>(nodes_[neighbor].neighbors.size())) {
-                nodes_[neighbor].neighbors.resize(level + 1);
-            }
-            nodes_[neighbor].neighbors[level].push_back(new_index);
-
-            // Prune neighbors if necessary
-            auto& nbrs = nodes_[neighbor].neighbors[level];
-            if (nbrs.size() > M_) {
-                std::vector<std::pair<float, size_t>> dist_nbrs;
-                dist_nbrs.reserve(nbrs.size());
-                for (size_t idx : nbrs) {
-                    float dist = l2_distance(nodes_[neighbor].vector, nodes_[idx].vector);
-                    dist_nbrs.emplace_back(dist, idx);
-                }
-                std::sort(dist_nbrs.begin(), dist_nbrs.end());
-                nbrs.clear();
-                for (size_t i = 0; i < M_ && i < dist_nbrs.size(); ++i) {
-                    nbrs.push_back(dist_nbrs[i].second);
-                }
-            }
+        // Get candidate neighbors from efConstruction search
+        auto candidate_ids = find_nearest_at_level(vec, current, level, ef_construction_);
+        std::vector<std::pair<float, int>> candidate_list;
+        candidate_list.reserve(candidate_ids.size());
+        for (size_t id : candidate_ids) {
+            float dist = l2_distance(vec, nodes_[id].vector);
+            candidate_list.emplace_back(dist, static_cast<int>(id));
         }
+        // Call select_neighbors
+        std::vector<float> new_vector = vec; // Assuming Vector is std::vector<float>
+        auto selected = select_neighbors(candidate_list, static_cast<int>(M_), new_vector);
 
-        // Prune new node's neighbors
-        auto& new_nbrs = nodes_[new_index].neighbors[level];
-        if (new_nbrs.size() > M_) {
-            std::vector<std::pair<float, size_t>> dist_nbrs;
-            dist_nbrs.reserve(new_nbrs.size());
-            for (size_t idx : new_nbrs) {
-                float dist = l2_distance(nodes_[new_index].vector, nodes_[idx].vector);
-                dist_nbrs.emplace_back(dist, idx);
+        // Insert neighbors
+        for (int neighbor_id : selected) {
+            if (level >= static_cast<int>(nodes_[neighbor_id].neighbors.size())) {
+                nodes_[neighbor_id].neighbors.resize(level + 1);
             }
-            std::sort(dist_nbrs.begin(), dist_nbrs.end());
-            new_nbrs.clear();
-            for (size_t i = 0; i < M_ && i < dist_nbrs.size(); ++i) {
-                new_nbrs.push_back(dist_nbrs[i].second);
-            }
+            nodes_[new_index].neighbors[level].push_back(neighbor_id);
+            nodes_[neighbor_id].neighbors[level].push_back(static_cast<int>(new_index));
+            prune_neighbors(neighbor_id, level);
         }
+        prune_neighbors(static_cast<int>(new_index), level);
     }
 
     if (node.level > max_level_) {
@@ -217,19 +258,16 @@ void HNSWIndex::add(const Vector& vec) {
         entry_point_ = new_index;
     }
 
-    // Debug output: average and max neighbors per node
-    // can comment out later
-    size_t total = 0;
-    size_t max_nbr = 0;
-    size_t node_count = nodes_.size();
-    for (const auto& n : nodes_) {
-        for (const auto& lvl_nbrs : n.neighbors) {
-            total += lvl_nbrs.size();
-            if (lvl_nbrs.size() > max_nbr) max_nbr = lvl_nbrs.size();
-        }
+    // Temporary debug prints for degree statistics
+    int total = 0;
+    int zero = 0;
+    for (auto& node : nodes_) {
+        int deg = node.neighbors.size() > 0 ? node.neighbors[0].size() : 0;
+        total += deg;
+        if (deg == 0) zero++;
     }
-    float avg = node_count ? static_cast<float>(total) / (node_count * (max_level_+1)) : 0.0f;
-    printf("[HNSW] Avg neighbors/node: %.2f, Max neighbors: %zu\n", avg, max_nbr);
+    std::cout << "AvgDeg=" << (float)total / nodes_.size()
+              << " ZeroDeg=" << zero << std::endl;
 }
 
 // search function

@@ -24,16 +24,6 @@ size_t HNSWIndex::size() const {
     return nodes_.size();
 }
 
-
-int HNSWIndex::generate_level() {
-    static std::mt19937 gen(42);
-    static std::uniform_real_distribution<double> dist(0.0, 1.0);
-
-    double r = -std::log(dist(gen)) * 1.0;
-    return static_cast<int>(r);
-}
-
-
 // basic greedy search
 size_t HNSWIndex::greedy_search(
     const Vector& query,
@@ -204,31 +194,34 @@ void HNSWIndex::prune_neighbors(int node_id, int level)
 
 // add node function
 void HNSWIndex::add(const Vector& vec) {
+    int node_level = random_level();
+    Node node;
+    node.vector = vec;
+    node.level = node_level;
+    node.neighbors.resize(node_level + 1);
+
+    const size_t new_index = nodes_.size();
+
     if (nodes_.empty()) {
-        Node node;
-        node.vector = vec;
-        node.level = generate_level();
-        node.neighbors.resize(node.level + 1);
         nodes_.push_back(node);
         entry_point_ = 0;
-        max_level_ = node.level;
+        max_level_ = node_level;
         return;
     }
 
-    Node node;
-    node.vector = vec;
-    node.level = generate_level();
-    node.neighbors.resize(node.level + 1);
-
-    const size_t new_index = nodes_.size();
     nodes_.push_back(node);
 
     size_t current = entry_point_;
-    for (int level = max_level_; level > node.level; level--) {
-        current = greedy_search(vec, current, level);
+    // Top-Down Descent: from max_level_ down to node_level+1 (exclusive)
+    if (max_level_ > node_level) {
+        for (int level = max_level_; level > node_level; --level) {
+            current = greedy_search(vec, current, level);
+        }
     }
 
-    for (int level = node.level; level >= 0; level--) {
+    // For each level ≤ node_level (from min(node_level, max_level_) down to 0)
+    int level_bound = std::min(node_level, max_level_);
+    for (int level = level_bound; level >= 0; --level) {
         // Get candidate neighbors from efConstruction search
         auto candidate_ids = find_nearest_at_level(vec, current, level, ef_construction_);
         std::vector<std::pair<float, int>> candidate_list;
@@ -253,9 +246,10 @@ void HNSWIndex::add(const Vector& vec) {
         prune_neighbors(static_cast<int>(new_index), level);
     }
 
-    if (node.level > max_level_) {
-        max_level_ = node.level;
-        entry_point_ = new_index;
+    // Update entry point and max_level_
+    if (node_level > max_level_) {
+        entry_point_ = static_cast<int>(new_index);
+        max_level_ = node_level;
     }
 
     // Temporary debug prints for degree statistics
@@ -354,4 +348,15 @@ std::vector<size_t> HNSWIndex::search(
     }
 
     return result;
+}
+
+int HNSWIndex::random_level() {
+    static std::default_random_engine gen(std::random_device{}());
+    static std::uniform_real_distribution<float> dist(0.0, 1.0);
+
+    int lvl = 0;
+    while (dist(gen) < 0.5) {  // 0.5 is common default
+        lvl++;
+    }
+    return lvl;
 }

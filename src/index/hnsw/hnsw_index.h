@@ -29,20 +29,20 @@ private:
     struct Node {
         Vector vector;
         int level;
-        std::vector<std::vector<size_t>> neighbors; 
+        std::vector<std::vector<size_t>> neighbors;
         // neighbors[level] = list of neighbor node indices
     };
 
     size_t dim_;
     size_t M_;                // max neighbors per level
-    int max_level_;
-    size_t entry_point_;      // index of entry node
-    size_t ef_search_ = 20; // for ef_search
+    int max_level_ = 0;
+    size_t entry_point_ = 0;  // index of entry node
+    size_t ef_search_ = 20;   // for ef_search
     size_t ef_construction_ = 100; // start bigger than ef_search
 
     std::vector<Node> nodes_;
 
-    int generate_level();
+    int random_level();
 
     // greedy search
     size_t greedy_search(

@@ -6,10 +6,14 @@
 #include <unordered_set>
 
 HNSWIndex::HNSWIndex(size_t dim, size_t M)
-    : dim_(dim),
-      M_(M),
-      max_level_(0),
-      entry_point_(0) {}
+        : dim_(dim),
+            M_(16), // Freeze baseline
+            max_level_(0),
+            entry_point_(0)
+{
+        ef_construction_ = 100;
+        ef_search_ = 50;
+}
 
 void HNSWIndex::set_ef_search(size_t ef_search) {
     ef_search_ = std::max<size_t>(1, ef_search);

@@ -17,6 +17,8 @@ public:
 
     size_t size() const override;
 
+    int max_level() const { return max_level_; }
+
     // Clean neighbor selection function
     std::vector<int> select_neighbors(
         const std::vector<std::pair<float, int>>& candidates,
@@ -38,7 +40,7 @@ private:
     int max_level_ = 0;
     size_t entry_point_ = 0;  // index of entry node
     size_t ef_search_ = 20;   // for ef_search
-    size_t ef_construction_ = 100; // start bigger than ef_search
+    size_t ef_construction_ = 200; // start bigger than ef_search
 
     std::vector<Node> nodes_;
 

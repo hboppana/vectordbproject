@@ -8,11 +8,11 @@
 
 HNSWIndex::HNSWIndex(size_t dim, size_t M)
         : dim_(dim),
-            M_(16), // Freeze baseline
+            M_(M),
             max_level_(0),
             entry_point_(0)
 {
-        ef_construction_ = 100;
+        ef_construction_ = 200;
         ef_search_ = 50;
 }
 
@@ -274,13 +274,27 @@ std::vector<size_t> HNSWIndex::search(
     }
 
     size_t current = entry_point_;
+    float current_dist = l2_distance(query, nodes_[current].vector);
 
+    // Greedy top-down descent: settle at each level before moving down
     for (int level = max_level_; level > 0; level--) {
-        current = greedy_search(query, current, level);
+        bool improved = true;
+        while (improved) {
+            improved = false;
+            if (level < static_cast<int>(nodes_[current].neighbors.size())) {
+                for (size_t neighbor : nodes_[current].neighbors[level]) {
+                    float neighbor_dist = l2_distance(query, nodes_[neighbor].vector);
+                    if (neighbor_dist < current_dist) {
+                        current = neighbor;
+                        current_dist = neighbor_dist;
+                        improved = true;
+                    }
+                }
+            }
+        }
     }
 
-    current = greedy_search(query, current, 0);
-
+    // Level 0: full efSearch expansion
     using DistId = std::pair<float, size_t>;
 
     auto min_heap_cmp = [](const DistId& a, const DistId& b) {
@@ -292,21 +306,15 @@ std::vector<size_t> HNSWIndex::search(
     std::unordered_set<size_t> visited;
     visited.reserve(nodes_.size());
 
-    const float entry_dist = l2_distance(query, nodes_[current].vector);
-    candidates.emplace(entry_dist, current);
-    best_results.emplace(entry_dist, current);
+    candidates.emplace(current_dist, current);
+    best_results.emplace(current_dist, current);
     visited.insert(current);
 
-    size_t explored = 0;
     while (!candidates.empty()) {
         const auto [candidate_dist, candidate] = candidates.top();
         candidates.pop();
 
         if (best_results.size() >= ef_search_ && candidate_dist > best_results.top().first) {
-            break;
-        }
-
-        if (explored++ >= ef_search_) {
             break;
         }
 
@@ -354,9 +362,7 @@ int HNSWIndex::random_level() {
     static std::default_random_engine gen(std::random_device{}());
     static std::uniform_real_distribution<float> dist(0.0, 1.0);
 
-    int lvl = 0;
-    while (dist(gen) < 0.5) {  // 0.5 is common default
-        lvl++;
-    }
-    return lvl;
+    // Standard HNSW exponential decay: P(L >= l) = e^(-l * ln(M))
+    // Equivalently: level = floor(-ln(rand) / ln(M))
+    return static_cast<int>(-std::log(dist(gen)) / std::log(static_cast<float>(M_)));
 }

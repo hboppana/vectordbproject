@@ -27,7 +27,7 @@ int main() {
     const std::vector<size_t> ef_values = {10, 20, 50};
 
     for (size_t n : sizes) {
-        HNSWIndex index(dim);
+        HNSWIndex index(dim, 32);  // Increased M for better connectivity
         std::vector<Vector> dataset;
         dataset.reserve(n);
 
@@ -36,6 +36,8 @@ int main() {
             dataset.push_back(v);
             index.add(v);
         }
+
+        std::cout << "N=" << n << " Max level: " << index.max_level() << std::endl;
 
         std::vector<Vector> query_set;
         query_set.reserve(queries);

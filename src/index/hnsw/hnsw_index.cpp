@@ -5,6 +5,7 @@
 #include <queue>
 #include <unordered_set>
 #include <iostream>
+#include <iomanip>
 
 HNSWIndex::HNSWIndex(size_t dim, size_t M)
         : dim_(dim),
@@ -252,16 +253,6 @@ void HNSWIndex::add(const Vector& vec) {
         max_level_ = node_level;
     }
 
-    // Temporary debug prints for degree statistics
-    int total = 0;
-    int zero = 0;
-    for (auto& node : nodes_) {
-        int deg = node.neighbors.size() > 0 ? node.neighbors[0].size() : 0;
-        total += deg;
-        if (deg == 0) zero++;
-    }
-    std::cout << "AvgDeg=" << (float)total / nodes_.size()
-              << " ZeroDeg=" << zero << std::endl;
 }
 
 // search function
@@ -358,11 +349,38 @@ std::vector<size_t> HNSWIndex::search(
     return result;
 }
 
+void HNSWIndex::print_degree_stats() const {
+    if (nodes_.empty()) {
+        std::cout << "No nodes in index.\n";
+        return;
+    }
+
+    size_t total_degree = 0;
+    size_t zero_degree = 0;
+    size_t max_degree = 0;
+
+    for (const auto& node : nodes_) {
+        size_t deg = (!node.neighbors.empty()) ? node.neighbors[0].size() : 0;
+        total_degree += deg;
+        if (deg == 0) zero_degree++;
+        if (deg > max_degree) max_degree = deg;
+    }
+
+    double avg_degree = static_cast<double>(total_degree) / nodes_.size();
+
+    std::cout << "Avg degree (level 0): " << std::fixed << std::setprecision(2) << avg_degree << "\n";
+    std::cout << "Zero-degree nodes:    " << zero_degree << "\n";
+    std::cout << "Max degree (level 0): " << max_degree << "\n";
+    std::cout << "Total nodes:          " << nodes_.size() << "\n";
+}
+
 int HNSWIndex::random_level() {
     static std::default_random_engine gen(std::random_device{}());
     static std::uniform_real_distribution<float> dist(0.0, 1.0);
 
-    // Standard HNSW exponential decay: P(L >= l) = e^(-l * ln(M))
-    // Equivalently: level = floor(-ln(rand) / ln(M))
-    return static_cast<int>(-std::log(dist(gen)) / std::log(static_cast<float>(M_)));
+    // HNSW level generation: level = floor(-ln(rand) * mL)
+    // Using mL = 1/ln(M/2) for proper hierarchy depth with large M.
+    // For M=32: mL ≈ 0.36, giving expected max_level ≈ 4–5 at N=50k.
+    double mL = 1.0 / std::log(std::max(2.0, static_cast<double>(M_) / 2.0));
+    return static_cast<int>(-std::log(dist(gen)) * mL);
 }

@@ -19,6 +19,8 @@ public:
 
     int max_level() const { return max_level_; }
 
+    void print_degree_stats() const;
+
     // Clean neighbor selection function
     std::vector<int> select_neighbors(
         const std::vector<std::pair<float, int>>& candidates,

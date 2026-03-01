@@ -1,0 +1,38 @@
+========================================
+  DAY 13: HNSW Optimization Benchmark
+========================================
+N=50000  dim=128  M=32  efConstruction=200
+
+--- PART 1 & 4: Build Index ---
+  Inserted 10000/50000  (79.18s)
+  Inserted 20000/50000  (195.40s)
+  Inserted 30000/50000  (326.17s)
+  Inserted 40000/50000  (465.99s)
+  Inserted 50000/50000  (611.80s)
+
+Build time:  611.80s  [WARN >= 20s — investigate]
+
+--- Hierarchy Depth ---
+Max level: 3
+  [LOW — level generator may be too steep]
+
+--- PART 3: Degree Statistics (Level 0) ---
+Avg degree (level 0): 29.34
+Zero-degree nodes:    0
+Max degree (level 0): 32
+Total nodes:          50000
+
+Generating 100 queries + brute-force ground truth...
+Ground truth computed.
+
+--- PART 2 & 5: Recall Sweep + Search Latency ---
+efSearch    Recall@1      AvgMs         Status
+----------------------------------------------------
+50          0.4800        3.6199        Recall<0.85  Latency HIGH
+75          0.5400        5.1615        Recall<0.85  Latency HIGH
+100         0.6300        6.7233        Recall<0.85  Latency HIGH
+150         0.7600        8.5092        Recall<0.85  Latency HIGH
+
+========================================
+  DAY 13 BENCHMARK COMPLETE
+========================================

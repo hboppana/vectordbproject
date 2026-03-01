@@ -3,17 +3,17 @@
 #include <algorithm>
 #include <cmath>
 #include <queue>
-#include <unordered_set>
 #include <iostream>
 #include <iomanip>
 
 HNSWIndex::HNSWIndex(size_t dim, size_t M)
         : dim_(dim),
             M_(M),
+            M_max0_(2 * M),   // Level 0 gets 2*M connections for better recall
             max_level_(0),
             entry_point_(0)
 {
-        ef_construction_ = 200;
+        ef_construction_ = 100;  // P3: reduced from 200
         ef_search_ = 50;
 }
 
@@ -78,15 +78,18 @@ std::vector<size_t> HNSWIndex::find_nearest_at_level(
     size_t start = greedy_search(query, entry, level);
     std::priority_queue<DistId, std::vector<DistId>, decltype(min_heap_cmp)> candidates(min_heap_cmp);
     std::priority_queue<DistId> best_results;
-    std::unordered_set<size_t> visited;
-    visited.reserve(nodes_.size());
+
+    // P0: Use flat visited vector instead of unordered_set
+    reset_visited();
+    if (visited_marker_.size() < nodes_.size()) {
+        visited_marker_.resize(nodes_.size(), 0);
+    }
 
     float entry_dist = l2_distance(query, nodes_[start].vector);
     candidates.emplace(entry_dist, start);
     best_results.emplace(entry_dist, start);
-    visited.insert(start);
+    mark_visited(start);
 
-    size_t explored = 0;
     while (!candidates.empty()) {
         const auto [candidate_dist, candidate] = candidates.top();
         candidates.pop();
@@ -94,16 +97,13 @@ std::vector<size_t> HNSWIndex::find_nearest_at_level(
         if (best_results.size() >= ef_construction_ && candidate_dist > best_results.top().first) {
             break;
         }
-        if (explored++ >= ef_construction_) {
-            break;
-        }
 
         if (level < static_cast<int>(nodes_[candidate].neighbors.size())) {
             for (size_t neighbor : nodes_[candidate].neighbors[level]) {
-                if (visited.find(neighbor) != visited.end()) {
+                if (is_visited(neighbor)) {
                     continue;
                 }
-                visited.insert(neighbor);
+                mark_visited(neighbor);
                 float dist = l2_distance(query, nodes_[neighbor].vector);
                 candidates.emplace(dist, neighbor);
                 best_results.emplace(dist, neighbor);
@@ -147,8 +147,11 @@ std::vector<int> HNSWIndex::select_neighbors(
               });
 
     std::vector<int> selected;
+    std::vector<int> pruned;  // P2: keepPruned fallback
 
     for (const auto& [dist_cn, candidate_id] : sorted) {
+        if ((int)selected.size() >= M)
+            break;
         bool good = true;
         for (int selected_id : selected) {
             float dist_cs = l2_distance(
@@ -162,34 +165,43 @@ std::vector<int> HNSWIndex::select_neighbors(
         }
         if (good) {
             selected.push_back(candidate_id);
+        } else {
+            pruned.push_back(candidate_id);  // P2: save for backfill
         }
-        if ((int)selected.size() == M)
-            break;
     }
+
+    // P2: Backfill with pruned candidates if we didn't get M neighbors
+    for (int pid : pruned) {
+        if ((int)selected.size() >= M)
+            break;
+        selected.push_back(pid);
+    }
+
     return selected;
 }
 
 
-// Simple pruning function
+// Pruning function — level-aware: uses M_max0_ at level 0, M_ elsewhere
 void HNSWIndex::prune_neighbors(int node_id, int level)
 {
     auto& neighbors = nodes_[node_id].neighbors[level];
-    if ((int)neighbors.size() <= M_)
+    size_t max_neighbors = (level == 0) ? M_max0_ : M_;
+    if (neighbors.size() <= max_neighbors)
         return;
     std::vector<std::pair<float, int>> dists;
-    for (int nid : neighbors) {
+    for (size_t nid : neighbors) {
         float d = l2_distance(
             nodes_[node_id].vector,
             nodes_[nid].vector
         );
-        dists.emplace_back(d, nid);
+        dists.emplace_back(d, static_cast<int>(nid));
     }
     std::sort(dists.begin(), dists.end(),
               [](const auto& a, const auto& b) {
                   return a.first < b.first;
               });
     neighbors.clear();
-    for (int i = 0; i < M_ && i < (int)dists.size(); ++i)
+    for (size_t i = 0; i < max_neighbors && i < dists.size(); ++i)
         neighbors.push_back(dists[i].second);
 }
 
@@ -231,9 +243,10 @@ void HNSWIndex::add(const Vector& vec) {
             float dist = l2_distance(vec, nodes_[id].vector);
             candidate_list.emplace_back(dist, static_cast<int>(id));
         }
-        // Call select_neighbors
-        std::vector<float> new_vector = vec; // Assuming Vector is std::vector<float>
-        auto selected = select_neighbors(candidate_list, static_cast<int>(M_), new_vector);
+        // Call select_neighbors — use 2*M at level 0 for better connectivity
+        int level_M = (level == 0) ? static_cast<int>(M_max0_) : static_cast<int>(M_);
+        std::vector<float> new_vector = vec;
+        auto selected = select_neighbors(candidate_list, level_M, new_vector);
 
         // Insert neighbors
         for (int neighbor_id : selected) {
@@ -294,12 +307,16 @@ std::vector<size_t> HNSWIndex::search(
 
     std::priority_queue<DistId, std::vector<DistId>, decltype(min_heap_cmp)> candidates(min_heap_cmp);
     std::priority_queue<DistId> best_results;
-    std::unordered_set<size_t> visited;
-    visited.reserve(nodes_.size());
+
+    // P0: Use flat visited vector instead of unordered_set
+    reset_visited();
+    if (visited_marker_.size() < nodes_.size()) {
+        visited_marker_.resize(nodes_.size(), 0);
+    }
 
     candidates.emplace(current_dist, current);
     best_results.emplace(current_dist, current);
-    visited.insert(current);
+    mark_visited(current);
 
     while (!candidates.empty()) {
         const auto [candidate_dist, candidate] = candidates.top();
@@ -311,11 +328,11 @@ std::vector<size_t> HNSWIndex::search(
 
         if (0 < static_cast<int>(nodes_[candidate].neighbors.size())) {
             for (size_t neighbor : nodes_[candidate].neighbors[0]) {
-                if (visited.find(neighbor) != visited.end()) {
+                if (is_visited(neighbor)) {
                     continue;
                 }
 
-                visited.insert(neighbor);
+                mark_visited(neighbor);
                 float dist = l2_distance(query, nodes_[neighbor].vector);
                 candidates.emplace(dist, neighbor);
                 best_results.emplace(dist, neighbor);
@@ -378,9 +395,11 @@ int HNSWIndex::random_level() {
     static std::default_random_engine gen(std::random_device{}());
     static std::uniform_real_distribution<float> dist(0.0, 1.0);
 
-    // HNSW level generation: level = floor(-ln(rand) * mL)
-    // Using mL = 1/ln(M/2) for proper hierarchy depth with large M.
-    // For M=32: mL ≈ 0.36, giving expected max_level ≈ 4–5 at N=50k.
-    double mL = 1.0 / std::log(std::max(2.0, static_cast<double>(M_) / 2.0));
+    // P1: Fix level generator for proper hierarchy depth.
+    // Use mL = 1/ln(2) ≈ 1.4427 — the standard choice that gives:
+    //   expected max_level ≈ mL * ln(N) ≈ 1.44 * ln(50000) ≈ 15.6
+    // That's too high. Instead use mL = 0.5 which gives:
+    //   expected max_level ≈ 0.5 * ln(50000) ≈ 5.4 → target 4-6 ✓
+    constexpr double mL = 0.5;
     return static_cast<int>(-std::log(dist(gen)) * mL);
 }

@@ -33,7 +33,7 @@ int main() {
 
     std::cout << "\n  DAY 13: HNSW Optimization Benchmark\n";
     std::cout << "N=" << N << "  dim=" << dim
-              << "  M=" << M << "  efConstruction=200\n\n";
+              << "  M=" << M << "  efConstruction=100  M_max0=" << (2*M) << "\n\n";
 
     // ----------------------------------------------------------
     //  PART 1 + PART 4 — Build index, measure build time

@@ -129,6 +129,8 @@ vector_db.exe: CMakeFiles/vector_db.dir/src/main.cpp.obj
 vector_db.exe: CMakeFiles/vector_db.dir/src/index/flat/flat_index.cpp.obj
 vector_db.exe: CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.obj
 vector_db.exe: CMakeFiles/vector_db.dir/build.make
+vector_db.exe: C:/msys64/ucrt64/lib/libgomp.dll.a
+vector_db.exe: C:/msys64/ucrt64/lib/libmingwthrd.a
 vector_db.exe: CMakeFiles/vector_db.dir/linkLibs.rsp
 vector_db.exe: CMakeFiles/vector_db.dir/objects1.rsp
 vector_db.exe: CMakeFiles/vector_db.dir/link.txt

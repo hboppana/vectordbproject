@@ -3,6 +3,9 @@
 #include <vector>
 #include <random>
 #include <cstdint>
+#include <mutex>
+#include <atomic>
+#include <memory>
 
 class HNSWIndex : public IndexBase {
 public:
@@ -21,6 +24,7 @@ public:
     int max_level() const { return max_level_; }
 
     void print_degree_stats() const;
+    void reserve(size_t n);
 
     // P2: Neighbor selection with keepPruned fallback
     std::vector<int> select_neighbors(
@@ -47,30 +51,9 @@ private:
     size_t ef_construction_ = 100; // P3: reduced from 200 to 100
 
     std::vector<Node> nodes_;
-
-    // P0: Flat visited array with generation counter (avoids unordered_set)
-    mutable std::vector<uint32_t> visited_marker_;
-    mutable uint32_t visited_gen_ = 0;
-
-    void reset_visited() const {
-        ++visited_gen_;
-        if (visited_gen_ == 0) {
-            // Overflow: clear the whole array
-            std::fill(visited_marker_.begin(), visited_marker_.end(), 0);
-            visited_gen_ = 1;
-        }
-    }
-
-    bool is_visited(size_t id) const {
-        return id < visited_marker_.size() && visited_marker_[id] == visited_gen_;
-    }
-
-    void mark_visited(size_t id) const {
-        if (id >= visited_marker_.size()) {
-            visited_marker_.resize(id + 1, 0);
-        }
-        visited_marker_[id] = visited_gen_;
-    }
+    std::vector<std::unique_ptr<std::mutex>> node_mutexes_;
+    std::atomic<size_t> node_count_{0};
+    std::mutex entry_mutex_;
 
     int random_level();
 

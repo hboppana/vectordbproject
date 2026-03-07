@@ -10,6 +10,7 @@
 #include <numeric>
 #include <random>
 #include <vector>
+#include <omp.h>
 
 Vector random_vector(size_t dim) {
     static std::mt19937 gen(42);
@@ -22,7 +23,7 @@ Vector random_vector(size_t dim) {
 
 int main() {
     // ================================================================
-    //  DAY 13 — HNSW Optimization Benchmark
+    //  HNSW Optimization Benchmark
     //  N=50k, M=32, efConstruction=200
     // ================================================================
     const size_t dim     = 128;
@@ -38,22 +39,29 @@ int main() {
     // ----------------------------------------------------------
     //  PART 1 + PART 4 — Build index, measure build time
     // ----------------------------------------------------------
-    std::cout << "--- PART 1 & 4: Build Index ---\n";
+    std::cout << "--- PART 1 & 4: Build Index (Multi-Threaded) ---\n";
     HNSWIndex index(dim, M);
+    index.reserve(N);
     std::vector<Vector> dataset;
     dataset.reserve(N);
 
-    Timer build_timer;
+    // Pre-generate all vectors for parallel insertion
+    std::cout << "  Generating " << N << " random vectors...\n";
     for (int i = 0; i < N; i++) {
-        Vector v = random_vector(dim);
-        dataset.push_back(v);
-        index.add(v);
-        if ((i + 1) % 10000 == 0) {
-            std::cout << "  Inserted " << (i + 1) << "/" << N
-                      << "  (" << std::fixed << std::setprecision(2)
-                      << build_timer.elapsed_ms() / 1000.0 << "s)\n";
-        }
+        dataset.push_back(random_vector(dim));
     }
+
+    // Parallel insertion using OpenMP
+    const int num_threads = omp_get_num_procs();
+    std::cout << "  Inserting with " << num_threads << " threads...\n";
+    omp_set_num_threads(num_threads);
+    
+    Timer build_timer;
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < N; i++) {
+        index.add(dataset[i]);
+    }
+    
     double build_time_s = build_timer.elapsed_ms() / 1000.0;
 
     std::cout << "\nBuild time:  " << std::fixed << std::setprecision(2)
@@ -156,7 +164,7 @@ int main() {
     }
 
     std::cout << "\n========================================\n";
-    std::cout << "  DAY 13 BENCHMARK COMPLETE\n";
+    std::cout << "  BENCHMARK COMPLETE\n";
     std::cout << "========================================\n";
 
     return 0;

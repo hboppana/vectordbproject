@@ -10,6 +10,8 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
+find_package(OpenMP REQUIRED)
+
 set(VECTOR_DB_SOURCES
     src/main.cpp
     src/index/flat/flat_index.cpp
@@ -19,3 +21,4 @@ set(VECTOR_DB_SOURCES
 add_executable(vector_db ${VECTOR_DB_SOURCES})
 
 target_include_directories(vector_db PRIVATE src)
+target_link_libraries(vector_db PUBLIC OpenMP::OpenMP_CXX)

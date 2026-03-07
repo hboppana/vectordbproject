@@ -21,8 +21,16 @@ void HNSWIndex::set_ef_search(size_t ef_search) {
     ef_search_ = std::max<size_t>(1, ef_search);
 }
 
+void HNSWIndex::reserve(size_t n) {
+    nodes_.resize(n);
+    node_mutexes_.resize(n);
+    for (size_t i = 0; i < n; ++i) {
+        node_mutexes_[i] = std::make_unique<std::mutex>();
+    }
+}
+
 size_t HNSWIndex::size() const {
-    return nodes_.size();
+    return node_count_.load();
 }
 
 // basic greedy search
@@ -66,7 +74,7 @@ std::vector<size_t> HNSWIndex::find_nearest_at_level(
     int level,
     size_t M
 ) const {
-    if (nodes_.empty()) {
+    if (node_count_.load() == 0) {
         return {};
     }
 
@@ -79,16 +87,23 @@ std::vector<size_t> HNSWIndex::find_nearest_at_level(
     std::priority_queue<DistId, std::vector<DistId>, decltype(min_heap_cmp)> candidates(min_heap_cmp);
     std::priority_queue<DistId> best_results;
 
-    // P0: Use flat visited vector instead of unordered_set
-    reset_visited();
-    if (visited_marker_.size() < nodes_.size()) {
-        visited_marker_.resize(nodes_.size(), 0);
+    // Thread-local visited array for concurrent safety
+    thread_local std::vector<uint32_t> tl_visited;
+    thread_local uint32_t tl_gen = 0;
+    ++tl_gen;
+    if (tl_gen == 0) {
+        std::fill(tl_visited.begin(), tl_visited.end(), 0);
+        tl_gen = 1;
+    }
+    size_t n = nodes_.size();
+    if (tl_visited.size() < n) {
+        tl_visited.resize(n, 0);
     }
 
     float entry_dist = l2_distance(query, nodes_[start].vector);
     candidates.emplace(entry_dist, start);
     best_results.emplace(entry_dist, start);
-    mark_visited(start);
+    tl_visited[start] = tl_gen;
 
     while (!candidates.empty()) {
         const auto [candidate_dist, candidate] = candidates.top();
@@ -100,10 +115,13 @@ std::vector<size_t> HNSWIndex::find_nearest_at_level(
 
         if (level < static_cast<int>(nodes_[candidate].neighbors.size())) {
             for (size_t neighbor : nodes_[candidate].neighbors[level]) {
-                if (is_visited(neighbor)) {
+                if (neighbor < tl_visited.size() && tl_visited[neighbor] == tl_gen) {
                     continue;
                 }
-                mark_visited(neighbor);
+                if (neighbor >= tl_visited.size()) {
+                    tl_visited.resize(neighbor + 1, 0);
+                }
+                tl_visited[neighbor] = tl_gen;
                 float dist = l2_distance(query, nodes_[neighbor].vector);
                 candidates.emplace(dist, neighbor);
                 best_results.emplace(dist, neighbor);
@@ -205,37 +223,50 @@ void HNSWIndex::prune_neighbors(int node_id, int level)
         neighbors.push_back(dists[i].second);
 }
 
-// add node function
+// add node function — thread-safe with fine-grained locking
 void HNSWIndex::add(const Vector& vec) {
     int node_level = random_level();
-    Node node;
-    node.vector = vec;
-    node.level = node_level;
-    node.neighbors.resize(node_level + 1);
 
-    const size_t new_index = nodes_.size();
+    // Atomically claim a slot
+    size_t new_index = node_count_.fetch_add(1);
 
-    if (nodes_.empty()) {
-        nodes_.push_back(node);
+    // Initialize node data (exclusive slot, no lock needed)
+    nodes_[new_index].vector = vec;
+    nodes_[new_index].level = node_level;
+    nodes_[new_index].neighbors.resize(node_level + 1);
+    // Reserve capacity to prevent reallocations during concurrent reads
+    for (int l = 0; l <= node_level; ++l) {
+        size_t cap = (l == 0) ? M_max0_ : M_;
+        nodes_[new_index].neighbors[l].reserve(cap * 2);
+    }
+
+    // Handle first node
+    if (new_index == 0) {
+        std::lock_guard<std::mutex> lock(entry_mutex_);
         entry_point_ = 0;
         max_level_ = node_level;
         return;
     }
 
-    nodes_.push_back(node);
+    // Snapshot entry point and max level
+    size_t current;
+    int cur_max_level;
+    {
+        std::lock_guard<std::mutex> lock(entry_mutex_);
+        current = entry_point_;
+        cur_max_level = max_level_;
+    }
 
-    size_t current = entry_point_;
-    // Top-Down Descent: from max_level_ down to node_level+1 (exclusive)
-    if (max_level_ > node_level) {
-        for (int level = max_level_; level > node_level; --level) {
+    // Top-Down Descent (read-only, no locks)
+    if (cur_max_level > node_level) {
+        for (int level = cur_max_level; level > node_level; --level) {
             current = greedy_search(vec, current, level);
         }
     }
 
-    // For each level ≤ node_level (from min(node_level, max_level_) down to 0)
-    int level_bound = std::min(node_level, max_level_);
+    // For each level, find neighbors and update edges
+    int level_bound = std::min(node_level, cur_max_level);
     for (int level = level_bound; level >= 0; --level) {
-        // Get candidate neighbors from efConstruction search
         auto candidate_ids = find_nearest_at_level(vec, current, level, ef_construction_);
         std::vector<std::pair<float, int>> candidate_list;
         candidate_list.reserve(candidate_ids.size());
@@ -243,29 +274,39 @@ void HNSWIndex::add(const Vector& vec) {
             float dist = l2_distance(vec, nodes_[id].vector);
             candidate_list.emplace_back(dist, static_cast<int>(id));
         }
-        // Call select_neighbors — use 2*M at level 0 for better connectivity
+
         int level_M = (level == 0) ? static_cast<int>(M_max0_) : static_cast<int>(M_);
         std::vector<float> new_vector = vec;
         auto selected = select_neighbors(candidate_list, level_M, new_vector);
 
-        // Insert neighbors
+        // Insert bidirectional edges with per-node locking (lock smaller id first)
         for (int neighbor_id : selected) {
+            size_t u = std::min(new_index, static_cast<size_t>(neighbor_id));
+            size_t v = std::max(new_index, static_cast<size_t>(neighbor_id));
+            std::scoped_lock lock(*node_mutexes_[u], *node_mutexes_[v]);
+
             if (level >= static_cast<int>(nodes_[neighbor_id].neighbors.size())) {
                 nodes_[neighbor_id].neighbors.resize(level + 1);
             }
             nodes_[new_index].neighbors[level].push_back(neighbor_id);
-            nodes_[neighbor_id].neighbors[level].push_back(static_cast<int>(new_index));
+            nodes_[neighbor_id].neighbors[level].push_back(static_cast<size_t>(new_index));
             prune_neighbors(neighbor_id, level);
         }
-        prune_neighbors(static_cast<int>(new_index), level);
+        // Prune new node's neighbors for this level
+        {
+            std::lock_guard<std::mutex> lock(*node_mutexes_[new_index]);
+            prune_neighbors(static_cast<int>(new_index), level);
+        }
     }
 
-    // Update entry point and max_level_
-    if (node_level > max_level_) {
-        entry_point_ = static_cast<int>(new_index);
-        max_level_ = node_level;
+    // Update entry point and max level
+    {
+        std::lock_guard<std::mutex> lock(entry_mutex_);
+        if (node_level > max_level_) {
+            entry_point_ = new_index;
+            max_level_ = node_level;
+        }
     }
-
 }
 
 // search function
@@ -273,7 +314,7 @@ std::vector<size_t> HNSWIndex::search(
     const Vector& query,
     size_t k
 ) const {
-    if (nodes_.empty() || k == 0) {
+    if (node_count_.load() == 0 || k == 0) {
         return {};
     }
 
@@ -308,15 +349,21 @@ std::vector<size_t> HNSWIndex::search(
     std::priority_queue<DistId, std::vector<DistId>, decltype(min_heap_cmp)> candidates(min_heap_cmp);
     std::priority_queue<DistId> best_results;
 
-    // P0: Use flat visited vector instead of unordered_set
-    reset_visited();
-    if (visited_marker_.size() < nodes_.size()) {
-        visited_marker_.resize(nodes_.size(), 0);
+    // Thread-local visited array
+    thread_local std::vector<uint32_t> tl_visited_s;
+    thread_local uint32_t tl_gen_s = 0;
+    ++tl_gen_s;
+    if (tl_gen_s == 0) {
+        std::fill(tl_visited_s.begin(), tl_visited_s.end(), 0);
+        tl_gen_s = 1;
+    }
+    if (tl_visited_s.size() < nodes_.size()) {
+        tl_visited_s.resize(nodes_.size(), 0);
     }
 
     candidates.emplace(current_dist, current);
     best_results.emplace(current_dist, current);
-    mark_visited(current);
+    tl_visited_s[current] = tl_gen_s;
 
     while (!candidates.empty()) {
         const auto [candidate_dist, candidate] = candidates.top();
@@ -328,11 +375,14 @@ std::vector<size_t> HNSWIndex::search(
 
         if (0 < static_cast<int>(nodes_[candidate].neighbors.size())) {
             for (size_t neighbor : nodes_[candidate].neighbors[0]) {
-                if (is_visited(neighbor)) {
+                if (neighbor < tl_visited_s.size() && tl_visited_s[neighbor] == tl_gen_s) {
                     continue;
                 }
 
-                mark_visited(neighbor);
+                if (neighbor >= tl_visited_s.size()) {
+                    tl_visited_s.resize(neighbor + 1, 0);
+                }
+                tl_visited_s[neighbor] = tl_gen_s;
                 float dist = l2_distance(query, nodes_[neighbor].vector);
                 candidates.emplace(dist, neighbor);
                 best_results.emplace(dist, neighbor);
@@ -367,7 +417,8 @@ std::vector<size_t> HNSWIndex::search(
 }
 
 void HNSWIndex::print_degree_stats() const {
-    if (nodes_.empty()) {
+    size_t count = node_count_.load();
+    if (count == 0) {
         std::cout << "No nodes in index.\n";
         return;
     }
@@ -376,24 +427,25 @@ void HNSWIndex::print_degree_stats() const {
     size_t zero_degree = 0;
     size_t max_degree = 0;
 
-    for (const auto& node : nodes_) {
+    for (size_t i = 0; i < count; ++i) {
+        const auto& node = nodes_[i];
         size_t deg = (!node.neighbors.empty()) ? node.neighbors[0].size() : 0;
         total_degree += deg;
         if (deg == 0) zero_degree++;
         if (deg > max_degree) max_degree = deg;
     }
 
-    double avg_degree = static_cast<double>(total_degree) / nodes_.size();
+    double avg_degree = static_cast<double>(total_degree) / count;
 
     std::cout << "Avg degree (level 0): " << std::fixed << std::setprecision(2) << avg_degree << "\n";
     std::cout << "Zero-degree nodes:    " << zero_degree << "\n";
     std::cout << "Max degree (level 0): " << max_degree << "\n";
-    std::cout << "Total nodes:          " << nodes_.size() << "\n";
+    std::cout << "Total nodes:          " << count << "\n";
 }
 
 int HNSWIndex::random_level() {
-    static std::default_random_engine gen(std::random_device{}());
-    static std::uniform_real_distribution<float> dist(0.0, 1.0);
+    thread_local std::default_random_engine gen(std::random_device{}());
+    thread_local std::uniform_real_distribution<float> dist(0.0, 1.0);
 
     // P1: Fix level generator for proper hierarchy depth.
     // Use mL = 1/ln(2) ≈ 1.4427 — the standard choice that gives:

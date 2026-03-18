@@ -6,6 +6,7 @@
 #include <mutex>
 #include <atomic>
 #include <memory>
+#include <string>
 
 class HNSWIndex : public IndexBase {
 public:
@@ -20,6 +21,10 @@ public:
     ) const override;
 
     size_t size() const override;
+
+    // Persistence: binary save/load of complete graph state.
+    bool save(const std::string& path) const;
+    bool load(const std::string& path);
 
     int max_level() const { return max_level_; }
 

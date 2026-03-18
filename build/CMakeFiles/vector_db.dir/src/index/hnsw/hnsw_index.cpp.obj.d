@@ -335,4 +335,11 @@ CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.obj: \
  C:/msys64/ucrt64/include/c++/15.2.0/bits/locale_conv.h \
  C:/msys64/ucrt64/include/c++/15.2.0/bits/quoted_string.h \
  C:/msys64/ucrt64/include/c++/15.2.0/sstream \
- C:/msys64/ucrt64/include/c++/15.2.0/bits/sstream.tcc
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/sstream.tcc \
+ C:/msys64/ucrt64/include/c++/15.2.0/cstring \
+ C:/msys64/ucrt64/include/string.h \
+ C:/msys64/ucrt64/include/sec_api/string_s.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/fstream \
+ C:/msys64/ucrt64/include/c++/15.2.0/x86_64-w64-mingw32/bits/basic_file.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/x86_64-w64-mingw32/bits/c++io.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/fstream.tcc

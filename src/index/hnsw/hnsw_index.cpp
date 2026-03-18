@@ -5,6 +5,29 @@
 #include <queue>
 #include <iostream>
 #include <iomanip>
+#include <cstdint>
+#include <cstring>
+#include <fstream>
+
+namespace {
+
+constexpr char kMagic[4] = {'V', 'D', 'B', 'I'};
+constexpr uint32_t kVersion = 1;
+constexpr uint32_t kTypeHnsw = 2;
+
+template <typename T>
+bool write_pod(std::ofstream& out, const T& v) {
+    out.write(reinterpret_cast<const char*>(&v), sizeof(T));
+    return static_cast<bool>(out);
+}
+
+template <typename T>
+bool read_pod(std::ifstream& in, T& v) {
+    in.read(reinterpret_cast<char*>(&v), sizeof(T));
+    return static_cast<bool>(in);
+}
+
+} // namespace
 
 HNSWIndex::HNSWIndex(size_t dim, size_t M)
         : dim_(dim),
@@ -454,4 +477,191 @@ int HNSWIndex::random_level() {
     //   expected max_level ≈ 0.5 * ln(50000) ≈ 5.4 → target 4-6 ✓
     constexpr double mL = 0.5;
     return static_cast<int>(-std::log(dist(gen)) * mL);
+}
+
+bool HNSWIndex::save(const std::string& path) const {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        return false;
+    }
+
+    const uint64_t dim_u64 = static_cast<uint64_t>(dim_);
+    const uint64_t m_u64 = static_cast<uint64_t>(M_);
+    const uint64_t mmax0_u64 = static_cast<uint64_t>(M_max0_);
+    const int32_t max_level_i32 = static_cast<int32_t>(max_level_);
+    const uint64_t entry_u64 = static_cast<uint64_t>(entry_point_);
+    const uint64_t ef_search_u64 = static_cast<uint64_t>(ef_search_);
+    const uint64_t ef_construction_u64 = static_cast<uint64_t>(ef_construction_);
+    const uint64_t node_count_u64 = static_cast<uint64_t>(node_count_.load());
+
+    out.write(kMagic, sizeof(kMagic));
+    if (!out ||
+        !write_pod(out, kVersion) ||
+        !write_pod(out, kTypeHnsw) ||
+        !write_pod(out, dim_u64) ||
+        !write_pod(out, m_u64) ||
+        !write_pod(out, mmax0_u64) ||
+        !write_pod(out, max_level_i32) ||
+        !write_pod(out, entry_u64) ||
+        !write_pod(out, ef_search_u64) ||
+        !write_pod(out, ef_construction_u64) ||
+        !write_pod(out, node_count_u64)) {
+        return false;
+    }
+
+    const size_t count = static_cast<size_t>(node_count_u64);
+    if (count > nodes_.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        const auto& node = nodes_[i];
+        if (node.vector.size() != dim_) {
+            return false;
+        }
+
+        const int32_t level_i32 = static_cast<int32_t>(node.level);
+        const uint64_t levels_u64 = static_cast<uint64_t>(node.neighbors.size());
+
+        if (!write_pod(out, level_i32)) {
+            return false;
+        }
+        out.write(reinterpret_cast<const char*>(node.vector.data()), static_cast<std::streamsize>(dim_ * sizeof(float)));
+        if (!out || !write_pod(out, levels_u64)) {
+            return false;
+        }
+
+        for (const auto& lvl_neighbors : node.neighbors) {
+            const uint64_t n_u64 = static_cast<uint64_t>(lvl_neighbors.size());
+            if (!write_pod(out, n_u64)) {
+                return false;
+            }
+            for (size_t nid : lvl_neighbors) {
+                const uint64_t id_u64 = static_cast<uint64_t>(nid);
+                if (!write_pod(out, id_u64)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+bool HNSWIndex::load(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return false;
+    }
+
+    char magic[4] = {};
+    uint32_t version = 0;
+    uint32_t type = 0;
+    uint64_t dim_u64 = 0;
+    uint64_t m_u64 = 0;
+    uint64_t mmax0_u64 = 0;
+    int32_t max_level_i32 = 0;
+    uint64_t entry_u64 = 0;
+    uint64_t ef_search_u64 = 0;
+    uint64_t ef_construction_u64 = 0;
+    uint64_t node_count_u64 = 0;
+
+    in.read(magic, sizeof(magic));
+    if (!in ||
+        std::memcmp(magic, kMagic, sizeof(kMagic)) != 0 ||
+        !read_pod(in, version) ||
+        !read_pod(in, type) ||
+        !read_pod(in, dim_u64) ||
+        !read_pod(in, m_u64) ||
+        !read_pod(in, mmax0_u64) ||
+        !read_pod(in, max_level_i32) ||
+        !read_pod(in, entry_u64) ||
+        !read_pod(in, ef_search_u64) ||
+        !read_pod(in, ef_construction_u64) ||
+        !read_pod(in, node_count_u64)) {
+        return false;
+    }
+
+    if (version != kVersion || type != kTypeHnsw) {
+        return false;
+    }
+    if (dim_u64 != static_cast<uint64_t>(dim_)) {
+        return false;
+    }
+    if (m_u64 != static_cast<uint64_t>(M_) || mmax0_u64 != static_cast<uint64_t>(M_max0_)) {
+        return false;
+    }
+
+    const size_t count = static_cast<size_t>(node_count_u64);
+    if (count == 0) {
+        nodes_.clear();
+        node_mutexes_.clear();
+        node_count_.store(0);
+        max_level_ = 0;
+        entry_point_ = 0;
+        ef_search_ = static_cast<size_t>(ef_search_u64);
+        ef_construction_ = static_cast<size_t>(ef_construction_u64);
+        return true;
+    }
+    if (entry_u64 >= node_count_u64 || max_level_i32 < 0) {
+        return false;
+    }
+
+    std::vector<Node> loaded_nodes;
+    loaded_nodes.resize(count);
+
+    for (size_t i = 0; i < count; ++i) {
+        int32_t level_i32 = 0;
+        uint64_t levels_u64 = 0;
+        if (!read_pod(in, level_i32)) {
+            return false;
+        }
+        if (level_i32 < 0) {
+            return false;
+        }
+
+        loaded_nodes[i].level = static_cast<int>(level_i32);
+        loaded_nodes[i].vector.resize(dim_);
+        in.read(reinterpret_cast<char*>(loaded_nodes[i].vector.data()), static_cast<std::streamsize>(dim_ * sizeof(float)));
+        if (!in || !read_pod(in, levels_u64)) {
+            return false;
+        }
+
+        const size_t levels = static_cast<size_t>(levels_u64);
+        if (levels != static_cast<size_t>(loaded_nodes[i].level + 1)) {
+            return false;
+        }
+
+        loaded_nodes[i].neighbors.resize(levels);
+        for (size_t l = 0; l < levels; ++l) {
+            uint64_t n_u64 = 0;
+            if (!read_pod(in, n_u64)) {
+                return false;
+            }
+            const size_t n = static_cast<size_t>(n_u64);
+            loaded_nodes[i].neighbors[l].resize(n);
+            for (size_t j = 0; j < n; ++j) {
+                uint64_t id_u64 = 0;
+                if (!read_pod(in, id_u64) || id_u64 >= node_count_u64) {
+                    return false;
+                }
+                loaded_nodes[i].neighbors[l][j] = static_cast<size_t>(id_u64);
+            }
+        }
+    }
+
+    std::vector<std::unique_ptr<std::mutex>> loaded_mutexes;
+    loaded_mutexes.resize(count);
+    for (size_t i = 0; i < count; ++i) {
+        loaded_mutexes[i] = std::make_unique<std::mutex>();
+    }
+
+    nodes_.swap(loaded_nodes);
+    node_mutexes_.swap(loaded_mutexes);
+    node_count_.store(count);
+    max_level_ = static_cast<int>(max_level_i32);
+    entry_point_ = static_cast<size_t>(entry_u64);
+    ef_search_ = static_cast<size_t>(ef_search_u64);
+    ef_construction_ = static_cast<size_t>(ef_construction_u64);
+    return true;
 }

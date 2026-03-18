@@ -9,6 +9,7 @@
 #include <limits>
 #include <numeric>
 #include <random>
+#include <string>
 #include <vector>
 #include <omp.h>
 
@@ -89,6 +90,24 @@ int main() {
     // ----------------------------------------------------------
     std::cout << "\n--- PART 3: Degree Statistics (Level 0) ---\n";
     index.print_degree_stats();
+
+    // ----------------------------------------------------------
+    //  PART 6 — Persistence round-trip check
+    // ----------------------------------------------------------
+    std::cout << "\n--- PART 6: Persistence (Save/Load) ---\n";
+    const std::string hnsw_path = "build/hnsw_index.bin";
+    if (index.save(hnsw_path)) {
+        HNSWIndex loaded_index(dim, M);
+        if (loaded_index.load(hnsw_path)) {
+            std::cout << "Saved + loaded index: OK\n";
+            std::cout << "Loaded nodes: " << loaded_index.size()
+                      << "  maxLevel: " << loaded_index.max_level() << "\n";
+        } else {
+            std::cout << "Load failed for " << hnsw_path << "\n";
+        }
+    } else {
+        std::cout << "Save failed for " << hnsw_path << "\n";
+    }
 
     // ----------------------------------------------------------
     //  Generate queries + brute-force ground truth

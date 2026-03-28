@@ -19,6 +19,7 @@ set(VECTOR_DB_SOURCES
     src/main.cpp
     src/index/flat/flat_index.cpp
     src/index/hnsw/hnsw_index.cpp
+    src/index/ivf/ivf_index.cpp
 )
 
 add_executable(vector_db ${VECTOR_DB_SOURCES})

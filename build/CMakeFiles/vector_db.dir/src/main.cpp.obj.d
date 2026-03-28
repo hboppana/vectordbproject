@@ -293,6 +293,7 @@ CMakeFiles/vector_db.dir/src/main.cpp.obj: \
  C:/msys64/ucrt64/include/c++/15.2.0/bits/shared_ptr_atomic.h \
  C:/msys64/ucrt64/include/c++/15.2.0/backward/auto_ptr.h \
  C:/msys64/ucrt64/include/c++/15.2.0/pstl/glue_memory_defs.h \
+ C:\Users\hbopp\Downloads\vectordbproject\src\index/ivf/ivf_index.h \
  C:\Users\hbopp\Downloads\vectordbproject\src\utils/timer.h \
  C:/msys64/ucrt64/include/c++/15.2.0/chrono \
  C:/msys64/ucrt64/include/c++/15.2.0/algorithm \

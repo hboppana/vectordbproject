@@ -10,6 +10,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "C:/Users/hbopp/Downloads/vectordbproject/src/index/flat/flat_index.cpp" "CMakeFiles/vector_db.dir/src/index/flat/flat_index.cpp.obj" "gcc" "CMakeFiles/vector_db.dir/src/index/flat/flat_index.cpp.obj.d"
   "C:/Users/hbopp/Downloads/vectordbproject/src/index/hnsw/hnsw_index.cpp" "CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.obj" "gcc" "CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.obj.d"
+  "C:/Users/hbopp/Downloads/vectordbproject/src/index/ivf/ivf_index.cpp" "CMakeFiles/vector_db.dir/src/index/ivf/ivf_index.cpp.obj" "gcc" "CMakeFiles/vector_db.dir/src/index/ivf/ivf_index.cpp.obj.d"
   "C:/Users/hbopp/Downloads/vectordbproject/src/main.cpp" "CMakeFiles/vector_db.dir/src/main.cpp.obj" "gcc" "CMakeFiles/vector_db.dir/src/main.cpp.obj.d"
   )
 

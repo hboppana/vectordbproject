@@ -1,6 +1,7 @@
 #include "core/distance.h"
 #include "index/flat/flat_index.h"
 #include "index/hnsw/hnsw_index.h"
+#include "index/ivf/ivf_index.h"
 #include "utils/timer.h"
 #include <algorithm>
 #include <cmath>
@@ -176,6 +177,70 @@ int main() {
 
         std::cout << std::left
                   << std::setw(12) << ef
+                  << std::fixed << std::setprecision(4)
+                  << std::setw(14) << recall
+                  << std::setw(14) << avg_ms
+                  << status << "\n";
+    }
+
+    // ----------------------------------------------------------
+    //  PART 7 — IVF MVP benchmark (IVF-Flat)
+    // ----------------------------------------------------------
+    std::cout << "\n--- PART 7: IVF MVP Benchmark ---\n";
+    const size_t ivf_nlist = 256;
+    const std::vector<size_t> nprobe_values = {4, 8, 16, 32};
+
+    IVFIndex ivf(dim, ivf_nlist, nprobe_values[0]);
+
+    Timer ivf_train_timer;
+    ivf.train(dataset, 12);
+    double ivf_train_ms = ivf_train_timer.elapsed_ms();
+
+    Timer ivf_add_timer;
+    for (const auto& vec : dataset) {
+        ivf.add(vec);
+    }
+    double ivf_add_ms = ivf_add_timer.elapsed_ms();
+
+    std::cout << "IVF train: " << std::fixed << std::setprecision(2)
+              << ivf_train_ms / 1000.0 << "s"
+              << "  add: " << ivf_add_ms / 1000.0 << "s"
+              << "  vectors: " << ivf.size() << "\n";
+
+    std::cout << std::left
+              << std::setw(12) << "nprobe"
+              << std::setw(14) << "Recall@1"
+              << std::setw(14) << "AvgMs"
+              << "Status\n";
+    std::cout << std::string(52, '-') << "\n";
+
+    for (size_t nprobe : nprobe_values) {
+        ivf.set_nprobe(nprobe);
+
+        size_t matches = 0;
+        double total_search_ms = 0.0;
+
+        for (int q = 0; q < queries; q++) {
+            Timer search_timer;
+            auto results = ivf.search(query_set[q], 1);
+            total_search_ms += search_timer.elapsed_ms();
+
+            if (!results.empty() && results[0] == ground_truth[q]) {
+                matches++;
+            }
+        }
+
+        const double recall = static_cast<double>(matches) / queries;
+        const double avg_ms = total_search_ms / queries;
+
+        std::string status;
+        if (recall >= 0.85) status += "Recall>=0.85 ";
+        else                status += "Recall<0.85  ";
+        if (avg_ms < 4.0)   status += "Latency OK";
+        else                status += "Latency HIGH";
+
+        std::cout << std::left
+                  << std::setw(12) << nprobe
                   << std::fixed << std::setprecision(4)
                   << std::setw(14) << recall
                   << std::setw(14) << avg_ms

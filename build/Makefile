@@ -176,6 +176,30 @@ src/index/hnsw/hnsw_index.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\vector_db.dir\build.make CMakeFiles/vector_db.dir/src/index/hnsw/hnsw_index.cpp.s
 .PHONY : src/index/hnsw/hnsw_index.cpp.s
 
+src/index/ivf/ivf_index.obj: src/index/ivf/ivf_index.cpp.obj
+.PHONY : src/index/ivf/ivf_index.obj
+
+# target to build an object file
+src/index/ivf/ivf_index.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\vector_db.dir\build.make CMakeFiles/vector_db.dir/src/index/ivf/ivf_index.cpp.obj
+.PHONY : src/index/ivf/ivf_index.cpp.obj
+
+src/index/ivf/ivf_index.i: src/index/ivf/ivf_index.cpp.i
+.PHONY : src/index/ivf/ivf_index.i
+
+# target to preprocess a source file
+src/index/ivf/ivf_index.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\vector_db.dir\build.make CMakeFiles/vector_db.dir/src/index/ivf/ivf_index.cpp.i
+.PHONY : src/index/ivf/ivf_index.cpp.i
+
+src/index/ivf/ivf_index.s: src/index/ivf/ivf_index.cpp.s
+.PHONY : src/index/ivf/ivf_index.s
+
+# target to generate assembly for a file
+src/index/ivf/ivf_index.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\vector_db.dir\build.make CMakeFiles/vector_db.dir/src/index/ivf/ivf_index.cpp.s
+.PHONY : src/index/ivf/ivf_index.cpp.s
+
 src/main.obj: src/main.cpp.obj
 .PHONY : src/main.obj
 
@@ -215,6 +239,9 @@ help:
 	@echo ... src/index/hnsw/hnsw_index.obj
 	@echo ... src/index/hnsw/hnsw_index.i
 	@echo ... src/index/hnsw/hnsw_index.s
+	@echo ... src/index/ivf/ivf_index.obj
+	@echo ... src/index/ivf/ivf_index.i
+	@echo ... src/index/ivf/ivf_index.s
 	@echo ... src/main.obj
 	@echo ... src/main.i
 	@echo ... src/main.s
